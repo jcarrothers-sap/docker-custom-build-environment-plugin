@@ -8,7 +8,6 @@ import hudson.model.Job;
 import hudson.model.TaskListener;
 import org.kohsuke.stapler.DataBoundConstructor;
 
-import java.io.File;
 import java.io.IOException;
 import java.util.Collection;
 import java.util.Collections;
@@ -33,17 +32,22 @@ public class DockerfileImageSelector extends DockerImageSelector {
     @Override
     public String prepareDockerImage(Docker docker, AbstractBuild build, TaskListener listener, boolean forcePull) throws IOException, InterruptedException {
 
-        String expandedContextPath = build.getEnvironment(listener).expand(contextPath);
-        FilePath filePath = build.getWorkspace().child(expandedContextPath);
-
-        FilePath dockerFile = filePath.child(getDockerfile());
-        if (!dockerFile.exists()) {
-            listener.getLogger().println("Your project is missing a Dockerfile");
-            throw new InterruptedException("Your project is missing a Dockerfile");
+        String expandedContextPath = build.getEnvironment(listener).expand(getContextPath());
+        FilePath dockerBuildWorkspace = build.getWorkspace().child(expandedContextPath);
+        if ( !dockerBuildWorkspace.isDirectory() ) {
+            listener.getLogger().println("Docker build path does not exist or is not a directory: " + expandedContextPath);
+            throw new InterruptedException("Docker build path does not exist or is not a directory: " + expandedContextPath);
         }
 
-        listener.getLogger().println("Build Docker image from " + expandedContextPath + "/"+getDockerfile()+" ...");
-        return docker.buildImage(filePath, dockerFile.getRemote(), forcePull);
+        String expandedDockerfile = build.getEnvironment(listener).expand(getDockerfile());
+        FilePath dockerFile = dockerBuildWorkspace.child(expandedDockerfile);
+        if (!dockerFile.exists()) {
+            listener.getLogger().println("Your Dockerfile is missing: " + expandedDockerfile);
+            throw new InterruptedException("Your Dockerfile is missing: " + expandedDockerfile);
+        }
+
+        listener.getLogger().println("Build Docker image from $WORKSPACE/" + expandedContextPath + "/"+expandedDockerfile+" ...");
+        return docker.buildImage(dockerBuildWorkspace, expandedDockerfile, forcePull);
     }
 
     @Override
